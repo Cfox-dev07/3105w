@@ -9,157 +9,57 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - name: Checkout source
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Locate Xcode project
+      - name: Find project
         shell: bash
         run: |
           set -e
 
-          PROJECT=$(find "$GITHUB_WORKSPACE" \
-            -type d \
-            -name "ThreeOneOSFive.xcodeproj" \
-            -print -quit)
+          PROJECT=$(find "$GITHUB_WORKSPACE" -type d -name "ThreeOneOSFive.xcodeproj" -print -quit)
 
           if [ -z "$PROJECT" ]; then
-            echo "ERROR: ThreeOneOSFive.xcodeproj not found."
+            echo "ThreeOneOSFive.xcodeproj not found"
             exit 1
           fi
 
-          PROJECT_DIR="$(dirname "$PROJECT")"
-
           echo "PROJECT=$PROJECT" >> "$GITHUB_ENV"
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "PROJECT_DIR=$(dirname "$PROJECT")" >> "$GITHUB_ENV"
 
-          echo "Project:"
-          echo "$PROJECT"
+          echo "Project: $PROJECT"
 
-      - name: Create shared scheme
+      - name: Create scheme
         shell: bash
         run: |
           set -e
 
           SCHEME_DIR="$PROJECT/xcshareddata/xcschemes"
+          SCHEME="$SCHEME_DIR/3105.xcscheme"
 
           mkdir -p "$SCHEME_DIR"
 
-          cat > "$SCHEME_DIR/3105.xcscheme" <<'EOF'
-<?xml version="1.0" encoding="UTF-8"?>
-<Scheme
-   LastUpgradeVersion = "1540"
-   version = "1.3">
+          printf '%s\n' \
+          '<?xml version="1.0" encoding="UTF-8"?>' \
+          '<Scheme LastUpgradeVersion="1540" version="1.3">' \
+          '  <BuildAction parallelizeBuildables="YES" buildImplicitDependencies="YES">' \
+          '    <BuildActionEntries>' \
+          '      <BuildActionEntry buildForTesting="YES" buildForRunning="YES" buildForProfiling="YES" buildForArchiving="YES" buildForAnalyzing="YES">' \
+          '        <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="3105A500" BuildableName="3105.app" BlueprintName="3105" ReferencedContainer="container:ThreeOneOSFive.xcodeproj">' \
+          '        </BuildableReference>' \
+          '      </BuildActionEntry>' \
+          '    </BuildActionEntries>' \
+          '  </BuildAction>' \
+          '  <TestAction buildConfiguration="Debug" shouldUseLaunchSchemeArgsEnv="YES"/>' \
+          '  <LaunchAction buildConfiguration="Debug" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.DebuggerFoundation.Launcher.LLDB"/>' \
+          '  <ProfileAction buildConfiguration="Release"/>' \
+          '  <AnalyzeAction buildConfiguration="Release"/>' \
+          '  <ArchiveAction buildConfiguration="Release" revealArchiveInOrganizer="YES"/>' \
+          '</Scheme>' \
+          > "$SCHEME"
 
-   <BuildAction
-      parallelizeBuildables = "YES"
-      buildImplicitDependencies = "YES">
-
-      <BuildActionEntries>
-
-         <BuildActionEntry
-            buildForTesting = "YES"
-            buildForRunning = "YES"
-            buildForProfiling = "YES"
-            buildForArchiving = "YES"
-            buildForAnalyzing = "YES">
-
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "3105A500"
-               BuildableName = "3105.app"
-               BlueprintName = "3105"
-               ReferencedContainer = "container:ThreeOneOSFive.xcodeproj">
-            </BuildableReference>
-
-         </BuildActionEntry>
-
-      </BuildActionEntries>
-
-   </BuildAction>
-
-   <TestAction
-      buildConfiguration = "Debug"
-      selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
-      selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
-      shouldUseLaunchSchemeArgsEnv = "YES">
-
-   </TestAction>
-
-   <LaunchAction
-      buildConfiguration = "Debug"
-      selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
-      selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
-      launchStyle = "0"
-      useCustomWorkingDirectory = "NO"
-      ignoresPersistentStateOnLaunch = "NO"
-      debugDocumentVersioning = "YES"
-      debugServiceExtension = "internal"
-      allowLocationSimulation = "YES">
-
-      <BuildableProductRunnable
-         runnableDebuggingMode = "0">
-
-         <BuildableReference
-            BuildableIdentifier = "primary"
-            BlueprintIdentifier = "3105A500"
-            BuildableName = "3105.app"
-            BlueprintName = "3105"
-            ReferencedContainer = "container:ThreeOneOSFive.xcodeproj">
-         </BuildableReference>
-
-      </BuildableProductRunnable>
-
-   </LaunchAction>
-
-   <ProfileAction
-      buildConfiguration = "Release"
-      shouldUseLaunchSchemeArgsEnv = "YES"
-      savedToolIdentifier = ""
-      useCustomWorkingDirectory = "NO"
-      debugDocumentVersioning = "YES">
-
-      <BuildableProductRunnable
-         runnableDebuggingMode = "0">
-
-         <BuildableReference
-            BuildableIdentifier = "primary"
-            BlueprintIdentifier = "3105A500"
-            BuildableName = "3105.app"
-            BlueprintName = "3105"
-            ReferencedContainer = "container:ThreeOneOSFive.xcodeproj">
-         </BuildableReference>
-
-      </BuildableProductRunnable>
-
-   </ProfileAction>
-
-   <AnalyzeAction
-      buildConfiguration = "Release">
-   </AnalyzeAction>
-
-   <ArchiveAction
-      buildConfiguration = "Release"
-      revealArchiveInOrganizer = "YES"
-      useCustomWorkingDirectory = "NO"
-      parallelizeBuildables = "YES">
-   </ArchiveAction>
-
-</Scheme>
-EOF
-
-          echo "Created:"
-          cat "$SCHEME_DIR/3105.xcscheme"
-
-      - name: Verify project and scheme
-        shell: bash
-        run: |
-          set -e
-
-          cd "$PROJECT_DIR"
-
-          xcodebuild \
-            -project "$PROJECT" \
-            -list
+          echo "Scheme created:"
+          cat "$SCHEME"
 
       - name: Archive
         shell: bash
@@ -182,10 +82,7 @@ EOF
             AD_HOC_CODE_SIGNING_ALLOWED=NO \
             SKIP_INSTALL=NO
 
-          if [ ! -d "$ARCHIVE" ]; then
-            echo "ERROR: Archive was not created."
-            exit 1
-          fi
+          test -d "$ARCHIVE"
 
           echo "Archive created:"
           ls -lah "$ARCHIVE"
@@ -205,34 +102,23 @@ EOF
             -print -quit)
 
           if [ -z "$APP" ]; then
-            echo "ERROR: No .app found in archive."
-
-            echo "Archive contents:"
+            echo "No .app found"
             find "$ARCHIVE" -maxdepth 5 -print
-
             exit 1
           fi
-
-          echo "Application:"
-          echo "$APP"
 
           mkdir -p "$OUT/Payload"
 
-          cp -R "$APP" "$OUT/Payload/3105.app"
+          cp -R "$APP" "$OUT/Payload/"
 
           cd "$OUT"
 
-          /usr/bin/zip \
-            -qry \
+          zip -qry \
             "$GITHUB_WORKSPACE/3105-v1.1.1-unsigned.ipa" \
             Payload
 
-          if [ ! -f "$GITHUB_WORKSPACE/3105-v1.1.1-unsigned.ipa" ]; then
-            echo "ERROR: IPA was not created."
-            exit 1
-          fi
+          test -f "$GITHUB_WORKSPACE/3105-v1.1.1-unsigned.ipa"
 
-          echo "IPA created:"
           ls -lh "$GITHUB_WORKSPACE/3105-v1.1.1-unsigned.ipa"
 
       - name: Upload IPA
