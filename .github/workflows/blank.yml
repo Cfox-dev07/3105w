@@ -6,120 +6,123 @@ on:
 jobs:
   build:
     runs-on: macos-14
-    timeout-minutes: 30
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Find project
-        shell: bash
+      - name: Extract ZIP
         run: |
           set -e
 
-          PROJECT=$(find "$GITHUB_WORKSPACE" -type d -name "ThreeOneOSFive.xcodeproj" -print -quit)
+          mkdir -p "$RUNNER_TEMP/source"
+
+          ZIP_FILE=$(find . -type f -name "*.zip" -not -path "./.git/*" | head -1)
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ZIP not found"
+            exit 1
+          fi
+
+          echo "ZIP: $ZIP_FILE"
+
+          unzip -q "$ZIP_FILE" -d "$RUNNER_TEMP/source"
+
+          PROJECT=$(find "$RUNNER_TEMP/source" -type d -name "*.xcodeproj" | head -1)
 
           if [ -z "$PROJECT" ]; then
-            echo "ThreeOneOSFive.xcodeproj not found"
+            echo "Xcode project not found"
             exit 1
           fi
 
           echo "PROJECT=$PROJECT" >> "$GITHUB_ENV"
-          echo "PROJECT_DIR=$(dirname "$PROJECT")" >> "$GITHUB_ENV"
 
-          echo "Project: $PROJECT"
+          echo "PROJECT:"
+          echo "$PROJECT"
 
-      - name: Create scheme
-        shell: bash
+      - name: Create Scheme
         run: |
           set -e
 
           SCHEME_DIR="$PROJECT/xcshareddata/xcschemes"
-          SCHEME="$SCHEME_DIR/3105.xcscheme"
 
           mkdir -p "$SCHEME_DIR"
 
+          SCHEME="$SCHEME_DIR/3105.xcscheme"
+
           printf '%s\n' \
-          '<?xml version="1.0" encoding="UTF-8"?>' \
-          '<Scheme LastUpgradeVersion="1540" version="1.3">' \
+          '<?xml version="1.0"?>' \
+          '<Scheme version="1.3">' \
           '  <BuildAction parallelizeBuildables="YES" buildImplicitDependencies="YES">' \
           '    <BuildActionEntries>' \
           '      <BuildActionEntry buildForTesting="YES" buildForRunning="YES" buildForProfiling="YES" buildForArchiving="YES" buildForAnalyzing="YES">' \
-          '        <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="3105A500" BuildableName="3105.app" BlueprintName="3105" ReferencedContainer="container:ThreeOneOSFive.xcodeproj">' \
-          '        </BuildableReference>' \
+          '        <BuildableReference BuildableIdentifier="primary" BlueprintName="3105" BuildableName="3105.app" BlueprintIdentifier="3105A500" ReferencedContainer="container:ThreeOneOSFive.xcodeproj"/>' \
           '      </BuildActionEntry>' \
           '    </BuildActionEntries>' \
           '  </BuildAction>' \
-          '  <TestAction buildConfiguration="Debug" shouldUseLaunchSchemeArgsEnv="YES"/>' \
-          '  <LaunchAction buildConfiguration="Debug" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.DebuggerFoundation.Launcher.LLDB"/>' \
+          '  <TestAction buildConfiguration="Debug"/>' \
+          '  <LaunchAction buildConfiguration="Debug"/>' \
           '  <ProfileAction buildConfiguration="Release"/>' \
           '  <AnalyzeAction buildConfiguration="Release"/>' \
-          '  <ArchiveAction buildConfiguration="Release" revealArchiveInOrganizer="YES"/>' \
+          '  <ArchiveAction buildConfiguration="Release"/>' \
           '</Scheme>' \
           > "$SCHEME"
 
-          echo "Scheme created:"
-          cat "$SCHEME"
+          echo "Scheme created"
 
       - name: Archive
-        shell: bash
         run: |
           set -e
-
-          cd "$PROJECT_DIR"
 
           ARCHIVE="$RUNNER_TEMP/3105.xcarchive"
 
           xcodebuild archive \
             -project "$PROJECT" \
             -scheme "3105" \
-            -configuration "Release" \
+            -configuration Release \
             -sdk iphoneos \
             -archivePath "$ARCHIVE" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            AD_HOC_CODE_SIGNING_ALLOWED=NO \
             SKIP_INSTALL=NO
 
-          test -d "$ARCHIVE"
+          if [ ! -d "$ARCHIVE" ]; then
+            echo "Archive failed"
+            exit 1
+          fi
 
-          echo "Archive created:"
-          ls -lah "$ARCHIVE"
+          echo "Archive OK"
 
       - name: Create IPA
-        shell: bash
         run: |
           set -e
 
           ARCHIVE="$RUNNER_TEMP/3105.xcarchive"
-          OUT="$RUNNER_TEMP/ipa"
 
           APP=$(find "$ARCHIVE/Products/Applications" \
             -maxdepth 1 \
             -type d \
             -name "*.app" \
-            -print -quit)
+            | head -1)
 
           if [ -z "$APP" ]; then
-            echo "No .app found"
+            echo "APP not found"
             find "$ARCHIVE" -maxdepth 5 -print
             exit 1
           fi
 
-          mkdir -p "$OUT/Payload"
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
 
-          cp -R "$APP" "$OUT/Payload/"
+          cp -R "$APP" "$RUNNER_TEMP/ipa/Payload/"
 
-          cd "$OUT"
+          cd "$RUNNER_TEMP/ipa"
 
           zip -qry \
             "$GITHUB_WORKSPACE/3105-v1.1.1-unsigned.ipa" \
             Payload
 
-          test -f "$GITHUB_WORKSPACE/3105-v1.1.1-unsigned.ipa"
-
-          ls -lh "$GITHUB_WORKSPACE/3105-v1.1.1-unsigned.ipa"
+          echo "IPA created"
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
@@ -127,4 +130,3 @@ jobs:
           name: 3105-v1.1.1-unsigned
           path: 3105-v1.1.1-unsigned.ipa
           if-no-files-found: error
-          retention-days: 7
