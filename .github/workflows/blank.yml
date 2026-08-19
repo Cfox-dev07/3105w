@@ -9,22 +9,169 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - name: Checkout
+      - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Select Xcode
-        run: |
-          sudo xcode-select -s /Applications/Xcode.app
-          xcodebuild -version
-
-      - name: Build and Archive
+      - name: Locate Xcode project
+        shell: bash
         run: |
           set -e
+
+          PROJECT=$(find "$GITHUB_WORKSPACE" \
+            -type d \
+            -name "ThreeOneOSFive.xcodeproj" \
+            -print -quit)
+
+          if [ -z "$PROJECT" ]; then
+            echo "ERROR: ThreeOneOSFive.xcodeproj not found."
+            exit 1
+          fi
+
+          PROJECT_DIR="$(dirname "$PROJECT")"
+
+          echo "PROJECT=$PROJECT" >> "$GITHUB_ENV"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+          echo "Project:"
+          echo "$PROJECT"
+
+      - name: Create shared scheme
+        shell: bash
+        run: |
+          set -e
+
+          SCHEME_DIR="$PROJECT/xcshareddata/xcschemes"
+
+          mkdir -p "$SCHEME_DIR"
+
+          cat > "$SCHEME_DIR/3105.xcscheme" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<Scheme
+   LastUpgradeVersion = "1540"
+   version = "1.3">
+
+   <BuildAction
+      parallelizeBuildables = "YES"
+      buildImplicitDependencies = "YES">
+
+      <BuildActionEntries>
+
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "3105A500"
+               BuildableName = "3105.app"
+               BlueprintName = "3105"
+               ReferencedContainer = "container:ThreeOneOSFive.xcodeproj">
+            </BuildableReference>
+
+         </BuildActionEntry>
+
+      </BuildActionEntries>
+
+   </BuildAction>
+
+   <TestAction
+      buildConfiguration = "Debug"
+      selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
+      selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
+      shouldUseLaunchSchemeArgsEnv = "YES">
+
+   </TestAction>
+
+   <LaunchAction
+      buildConfiguration = "Debug"
+      selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
+      selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
+      launchStyle = "0"
+      useCustomWorkingDirectory = "NO"
+      ignoresPersistentStateOnLaunch = "NO"
+      debugDocumentVersioning = "YES"
+      debugServiceExtension = "internal"
+      allowLocationSimulation = "YES">
+
+      <BuildableProductRunnable
+         runnableDebuggingMode = "0">
+
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "3105A500"
+            BuildableName = "3105.app"
+            BlueprintName = "3105"
+            ReferencedContainer = "container:ThreeOneOSFive.xcodeproj">
+         </BuildableReference>
+
+      </BuildableProductRunnable>
+
+   </LaunchAction>
+
+   <ProfileAction
+      buildConfiguration = "Release"
+      shouldUseLaunchSchemeArgsEnv = "YES"
+      savedToolIdentifier = ""
+      useCustomWorkingDirectory = "NO"
+      debugDocumentVersioning = "YES">
+
+      <BuildableProductRunnable
+         runnableDebuggingMode = "0">
+
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "3105A500"
+            BuildableName = "3105.app"
+            BlueprintName = "3105"
+            ReferencedContainer = "container:ThreeOneOSFive.xcodeproj">
+         </BuildableReference>
+
+      </BuildableProductRunnable>
+
+   </ProfileAction>
+
+   <AnalyzeAction
+      buildConfiguration = "Release">
+   </AnalyzeAction>
+
+   <ArchiveAction
+      buildConfiguration = "Release"
+      revealArchiveInOrganizer = "YES"
+      useCustomWorkingDirectory = "NO"
+      parallelizeBuildables = "YES">
+   </ArchiveAction>
+
+</Scheme>
+EOF
+
+          echo "Created:"
+          cat "$SCHEME_DIR/3105.xcscheme"
+
+      - name: Verify project and scheme
+        shell: bash
+        run: |
+          set -e
+
+          cd "$PROJECT_DIR"
+
+          xcodebuild \
+            -project "$PROJECT" \
+            -list
+
+      - name: Archive
+        shell: bash
+        run: |
+          set -e
+
+          cd "$PROJECT_DIR"
 
           ARCHIVE="$RUNNER_TEMP/3105.xcarchive"
 
           xcodebuild archive \
-            -project "ThreeOneOSFive.xcodeproj" \
+            -project "$PROJECT" \
             -scheme "3105" \
             -configuration "Release" \
             -sdk iphoneos \
@@ -35,10 +182,16 @@ jobs:
             AD_HOC_CODE_SIGNING_ALLOWED=NO \
             SKIP_INSTALL=NO
 
-          echo "Archive:"
+          if [ ! -d "$ARCHIVE" ]; then
+            echo "ERROR: Archive was not created."
+            exit 1
+          fi
+
+          echo "Archive created:"
           ls -lah "$ARCHIVE"
 
       - name: Create IPA
+        shell: bash
         run: |
           set -e
 
@@ -52,21 +205,32 @@ jobs:
             -print -quit)
 
           if [ -z "$APP" ]; then
-            echo "ERROR: Không tìm thấy .app trong archive."
+            echo "ERROR: No .app found in archive."
+
+            echo "Archive contents:"
             find "$ARCHIVE" -maxdepth 5 -print
+
             exit 1
           fi
 
-          echo "APP: $APP"
+          echo "Application:"
+          echo "$APP"
 
           mkdir -p "$OUT/Payload"
-          cp -R "$APP" "$OUT/Payload/"
+
+          cp -R "$APP" "$OUT/Payload/3105.app"
 
           cd "$OUT"
 
-          zip -qry \
+          /usr/bin/zip \
+            -qry \
             "$GITHUB_WORKSPACE/3105-v1.1.1-unsigned.ipa" \
             Payload
+
+          if [ ! -f "$GITHUB_WORKSPACE/3105-v1.1.1-unsigned.ipa" ]; then
+            echo "ERROR: IPA was not created."
+            exit 1
+          fi
 
           echo "IPA created:"
           ls -lh "$GITHUB_WORKSPACE/3105-v1.1.1-unsigned.ipa"
@@ -77,3 +241,4 @@ jobs:
           name: 3105-v1.1.1-unsigned
           path: 3105-v1.1.1-unsigned.ipa
           if-no-files-found: error
+          retention-days: 7
