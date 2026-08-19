@@ -6,10 +6,16 @@ on:
 jobs:
   build:
     runs-on: macos-14
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode.app
+          xcodebuild -version
 
       - name: Build and Archive
         run: |
@@ -19,7 +25,7 @@ jobs:
 
           xcodebuild archive \
             -project "ThreeOneOSFive.xcodeproj" \
-            -target "3105" \
+            -scheme "3105" \
             -configuration "Release" \
             -sdk iphoneos \
             -archivePath "$ARCHIVE" \
@@ -27,8 +33,10 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             AD_HOC_CODE_SIGNING_ALLOWED=NO \
-            SKIP_INSTALL=NO \
-            BUILD_LIBRARY_FOR_DISTRIBUTION=NO
+            SKIP_INSTALL=NO
+
+          echo "Archive:"
+          ls -lah "$ARCHIVE"
 
       - name: Create IPA
         run: |
@@ -36,11 +44,23 @@ jobs:
 
           ARCHIVE="$RUNNER_TEMP/3105.xcarchive"
           OUT="$RUNNER_TEMP/ipa"
-          APP="$ARCHIVE/Products/Applications/3105.app"
+
+          APP=$(find "$ARCHIVE/Products/Applications" \
+            -maxdepth 1 \
+            -type d \
+            -name "*.app" \
+            -print -quit)
+
+          if [ -z "$APP" ]; then
+            echo "ERROR: Không tìm thấy .app trong archive."
+            find "$ARCHIVE" -maxdepth 5 -print
+            exit 1
+          fi
+
+          echo "APP: $APP"
 
           mkdir -p "$OUT/Payload"
-
-          cp -R "$APP" "$OUT/Payload/3105.app"
+          cp -R "$APP" "$OUT/Payload/"
 
           cd "$OUT"
 
@@ -48,8 +68,12 @@ jobs:
             "$GITHUB_WORKSPACE/3105-v1.1.1-unsigned.ipa" \
             Payload
 
+          echo "IPA created:"
+          ls -lh "$GITHUB_WORKSPACE/3105-v1.1.1-unsigned.ipa"
+
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: 3105-v1.1.1-unsigned
           path: 3105-v1.1.1-unsigned.ipa
+          if-no-files-found: error
